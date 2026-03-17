@@ -14,7 +14,7 @@ import os
 import logging
 import asyncio
 import threading
-import nest_asyncio
+
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -27,7 +27,7 @@ from telegram.ext import (
 )
 import yt_dlp
 
-nest_asyncio.apply()
+
 
 # ───────────────────────────────────────────────────────────
 # ⚙️  الإعدادات — غيّر التوكن هنا فقط
@@ -306,4 +306,7 @@ async def run_bot():
     logger.info("✅ البوت شغال!")
     await app.run_polling()
 
-asyncio.get_event_loop().run_until_complete(run_bot())
+import asyncio
+
+if __name__ == "__main__":
+    asyncio.run(run_bot())
