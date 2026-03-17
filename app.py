@@ -15,7 +15,7 @@ import yt_dlp
 # ─────────────────────────────
 # ⚙️ الإعدادات
 # ─────────────────────────────
-BOT_TOKEN        = os.getenv("8783058461:AAEWt0_DpEaYkMh6IOrvKnkWGXK23ByrQz4")
+BOT_TOKEN        = os.getenv("BOT_TOKEN")
 DOWNLOAD_DIR     = "downloads"
 COOKIES_FILE     = "com_cookies.txt"
 REQUIRED_CHANNEL = "@ixm_iii"
