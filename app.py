@@ -48,14 +48,15 @@ def detect_platform(url):
 def download(url, mode="video"):
     if mode == "audio":
         ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }],
-        }
+    "format": "bestaudio/best",
+    "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+    "ffmpeg_location": "/usr/bin/ffmpeg",
+    "postprocessors": [{
+        "key": "FFmpegExtractAudio",
+        "preferredcodec": "mp3",
+        "preferredquality": "192",
+    }],
+}
     else:
         ydl_opts = {
             "format": "best",
