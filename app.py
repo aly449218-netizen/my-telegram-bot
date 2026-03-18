@@ -3,120 +3,144 @@ import logging
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters,
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
 )
 import yt_dlp
 
-# ─────────────────────────────
-# ⚙️ الإعدادات
-# ─────────────────────────────
-BOT_TOKEN        = os.getenv("BOT_TOKEN")
-DOWNLOAD_DIR     = "downloads"
-COOKIES_FILE     = "com_cookies.txt"
-REQUIRED_CHANNEL = "@ixm_iii"
+# ────────────────
+# ⚙️ إعدادات
+# ────────────────
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+DOWNLOAD_DIR = "downloads"
 
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-
+logging.basicConfig(level=logging.INFO)
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# ─────────────────────────────
-# 🌐 Flask (مطلوب لـ Railway)
-# ─────────────────────────────
+# ────────────────
+# 🌐 Flask (Railway)
+# ────────────────
 app_flask = Flask(__name__)
 
 @app_flask.route("/")
 def home():
-    return "Bot is running!"
+    return "Bot Running 🚀"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app_flask.run(host="0.0.0.0", port=port)
 
-# ─────────────────────────────
-# ✅ التحقق من الاشتراك
-# ─────────────────────────────
-async def is_subscribed(user_id, context):
-    try:
-        member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
-        return member.status in ("member", "administrator", "creator")
-    except:
-        return False
+# ────────────────
+# 🔍 تحديد المنصة
+# ────────────────
+def detect_platform(url):
+    if "youtube" in url or "youtu.be" in url:
+        return "YouTube"
+    elif "tiktok" in url:
+        return "TikTok"
+    elif "instagram" in url:
+        return "Instagram"
+    return "Unknown"
 
-async def check_subscription(update, context):
-    if await is_subscribed(update.effective_user.id, context):
-        return True
-
-    keyboard = [[
-        InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{REQUIRED_CHANNEL[1:]}"),
-        InlineKeyboardButton("✅ تحقق", callback_data="check_sub"),
-    ]]
-    await update.message.reply_text(
-        "اشترك بالقناة أولاً",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return False
-
-# ─────────────────────────────
-# 🔽 تنزيل الفيديو
-# ─────────────────────────────
-def download_video(url):
-    ydl_opts = {
-        "format": "best",
-        "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
-        "quiet": True,
-    }
-
-    if os.path.exists(COOKIES_FILE):
-        ydl_opts["cookiefile"] = COOKIES_FILE
+# ────────────────
+# ⬇️ تحميل
+# ────────────────
+def download(url, mode="video"):
+    if mode == "audio":
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }],
+        }
+    else:
+        ydl_opts = {
+            "format": "best",
+            "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+        }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
+
+            if mode == "audio":
+                filename = filename.rsplit(".", 1)[0] + ".mp3"
+
             return True, filename
     except Exception as e:
         return False, str(e)
 
-# ─────────────────────────────
-# 📩 الأوامر
-# ─────────────────────────────
+# ────────────────
+# 📩 start
+# ────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_subscription(update, context):
-        return
-    await update.message.reply_text("ارسل رابط الفيديو")
+    await update.message.reply_text(
+        "👋 هلا بيك!\n\n"
+        "📌 أرسل رابط الفيديو وأنا أنزله لك\n"
+        "🎵 أو أستخرج الصوت MP3\n\n"
+        "🚀 يدعم:\nYouTube | TikTok | Instagram"
+    )
 
+# ────────────────
+# 🔗 استقبال الرابط
+# ────────────────
 async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_subscription(update, context):
+    url = update.message.text
+    platform = detect_platform(url)
+
+    context.user_data["url"] = url
+
+    keyboard = [
+        [InlineKeyboardButton("🎬 فيديو", callback_data="video")],
+        [InlineKeyboardButton("🎵 صوت فقط (MP3)", callback_data="audio")]
+    ]
+
+    await update.message.reply_text(
+        f"📥 تم اكتشاف: {platform}\n\nاختر نوع التحميل:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ────────────────
+# 🎛️ الاختيارات
+# ────────────────
+async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    url = context.user_data.get("url")
+
+    if not url:
+        await query.edit_message_text("❌ أرسل الرابط مرة ثانية")
         return
 
-    url = update.message.text
-    await update.message.reply_text("⏳ جاري التحميل...")
+    mode = query.data
 
-    success, result = download_video(url)
+    await query.edit_message_text("⏳ جاري التحميل...")
+
+    success, result = download(url, mode)
 
     if not success:
-        await update.message.reply_text(f"❌ خطأ:\n{result}")
+        await query.message.reply_text(f"❌ خطأ:\n{result}")
         return
 
     try:
-        await update.message.reply_video(video=open(result, "rb"))
+        if mode == "audio":
+            await query.message.reply_audio(audio=open(result, "rb"))
+        else:
+            await query.message.reply_video(video=open(result, "rb"))
     except Exception as e:
-        await update.message.reply_text(f"❌ خطأ بالإرسال: {e}")
+        await query.message.reply_text(f"❌ خطأ بالإرسال: {e}")
     finally:
         if os.path.exists(result):
             os.remove(result)
 
-# ─────────────────────────────
-# 🚀 تشغيل البوت
-# ─────────────────────────────
+# ────────────────
+# 🚀 تشغيل
+# ────────────────
 def main():
     import threading
     threading.Thread(target=run_flask).start()
@@ -125,6 +149,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
+    app.add_handler(CallbackQueryHandler(handle_choice))
 
     print("✅ Bot Running...")
     app.run_polling()
