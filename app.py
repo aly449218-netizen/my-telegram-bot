@@ -13,6 +13,7 @@ import yt_dlp
 # ────────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DOWNLOAD_DIR = "downloads"
+REQUIRED_CHANNEL = "@ixm_iii"  # ← غير اسم القناة هنا
 
 logging.basicConfig(level=logging.INFO)
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -29,6 +30,31 @@ def home():
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app_flask.run(host="0.0.0.0", port=port)
+
+# ────────────────
+# ✅ التحقق من الاشتراك
+# ────────────────
+async def is_subscribed(user_id, context):
+    try:
+        member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except:
+        return False
+
+async def check_subscription(update, context):
+    if await is_subscribed(update.effective_user.id, context):
+        return True
+
+    keyboard = [[
+        InlineKeyboardButton("📢 اشترك بالقناة", url=f"https://t.me/{REQUIRED_CHANNEL[1:]}"),
+        InlineKeyboardButton("✅ تحقق", callback_data="check_sub"),
+    ]]
+
+    await update.message.reply_text(
+        "⚠️ لازم تشترك بالقناة أولاً",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return False
 
 # ────────────────
 # 🔍 تحديد المنصة
@@ -48,15 +74,9 @@ def detect_platform(url):
 def download(url, mode="video"):
     if mode == "audio":
         ydl_opts = {
-    "format": "bestaudio/best",
-    "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
-    "ffmpeg_location": "/usr/bin/ffmpeg",
-    "postprocessors": [{
-        "key": "FFmpegExtractAudio",
-        "preferredcodec": "mp3",
-        "preferredquality": "192",
-    }],
-}
+            "format": "bestaudio",
+            "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+        }
     else:
         ydl_opts = {
             "format": "best",
@@ -67,10 +87,6 @@ def download(url, mode="video"):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
-
-            if mode == "audio":
-                filename = filename.rsplit(".", 1)[0] + ".mp3"
-
             return True, filename
     except Exception as e:
         return False, str(e)
@@ -79,17 +95,22 @@ def download(url, mode="video"):
 # 📩 start
 # ────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_subscription(update, context):
+        return
+
     await update.message.reply_text(
         "👋 هلا بيك!\n\n"
-        "📌 أرسل رابط الفيديو وأنا أنزله لك\n"
-        "🎵 أو أستخرج الصوت MP3\n\n"
-        "🚀 يدعم:\nYouTube | TikTok | Instagram"
+        "📌 أرسل رابط الفيديو\n"
+        "🎵 أو حمل الصوت فقط"
     )
 
 # ────────────────
 # 🔗 استقبال الرابط
 # ────────────────
 async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_subscription(update, context):
+        return
+
     url = update.message.text
     platform = detect_platform(url)
 
@@ -97,13 +118,25 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("🎬 فيديو", callback_data="video")],
-        [InlineKeyboardButton("🎵 صوت فقط (MP3)", callback_data="audio")]
+        [InlineKeyboardButton("🎵 صوت فقط", callback_data="audio")]
     ]
 
     await update.message.reply_text(
-        f"📥 تم اكتشاف: {platform}\n\nاختر نوع التحميل:",
+        f"📥 المنصة: {platform}\n\nاختر:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+# ────────────────
+# 🔄 تحقق الاشتراك
+# ────────────────
+async def handle_check_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if await is_subscribed(update.effective_user.id, context):
+        await query.edit_message_text("✅ تم التحقق! أرسل الرابط الآن")
+    else:
+        await query.edit_message_text("❌ بعدك ما مشترك")
 
 # ────────────────
 # 🎛️ الاختيارات
@@ -111,6 +144,10 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    if not await is_subscribed(update.effective_user.id, context):
+        await query.edit_message_text("❌ لازم تشترك أول")
+        return
 
     url = context.user_data.get("url")
 
@@ -130,7 +167,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if mode == "audio":
-            await query.message.reply_audio(audio=open(result, "rb"))
+            await query.message.reply_document(document=open(result, "rb"))
         else:
             await query.message.reply_video(video=open(result, "rb"))
     except Exception as e:
@@ -151,6 +188,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
     app.add_handler(CallbackQueryHandler(handle_choice))
+    app.add_handler(CallbackQueryHandler(handle_check_sub, pattern="check_sub"))
 
     print("✅ Bot Running...")
     app.run_polling()
