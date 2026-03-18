@@ -99,9 +99,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "👋 هلا بيك!\n\n"
-        "📌 أرسل رابط الفيديو\n"
-        "🎵 أو حمل الصوت فقط"
+       "👋 هلا بيك!\n\n"
+        "📌 أرسل رابط الفيديو وأنا أنزله لك\n"
+        "🎵 أو أستخرج الصوت MP3\n\n"
+        "🚀 يدعم:\nYouTube | TikTok | Instagram"
     )
 
 # ────────────────
